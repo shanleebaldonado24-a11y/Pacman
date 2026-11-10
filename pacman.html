@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pac-Man Game</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #080820;
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+
+        h1 {
+            color: rgb(255, 255, 2);
+            margin-bottom: 8px;
+        }
+
+        #score {
+            color: #b6efe4;
+            font-size: 20px;
+            margin: 12px;
+        }
+
+        canvas {
+            width: min(92vw, 450px);
+            height: auto;
+            border: 3px solid #244cff;
+            background: black;
+        }
+
+        button {
+            background: #244cff;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            margin: 6px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .controls {
+            margin: 10px auto;
+            max-width: 220px;
+            display: grid;
+            grid-template-columns: repeat(3, 65px);
+            gap: 5px;
+            justify-content: center;
+        }
+
+        .controls button {
+            margin: 0;
+            padding: 14px 0;
+            font-size: 22px;
+        }
+
+        p {
+            color: #ccccdd;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>🟡 PAC-MAN</h1>
+    <p>Eat all the dots and avoid the ghosts!</p>
+
+    <div id="score">Score: 0</div>
+
+    <canvas id="game" width="450" height="450"></canvas>
+
+    <div>
+        <button onclick="restartGame()">Restart Game</button>
+    </div>
+
+    <div class="controls">
+        <span></span>
+        <button onclick="setDirection(0,-1)">⬆️</button>
+        <span></span>
+
+        <button onclick="setDirection(-1,0)">⬅️</button>
+        <button onclick="setDirection(0,1)">⬇️</button>
+        <button onclick="setDirection(1,0)">➡️</button>
+    </div>
+
+    <p>Controls: Arrow keys or WASD</p>
+
+    <script>
+        const canvas = document.getElementById("game");
+        const ctx = canvas.getContext("2d");
+        const scoreText = document.getElementById("score");
+
+        const tile = 18;
+
+        const originalMap = [
+            "#########################",
+            "#.......................#",
+            "#....###..##..#...#.....#",
+            "#..#..#.......#...#.....#",
+            "#..#.....###......##....#",
+            "#.........#...#......#..#",
+            "#.###.##..###.#......#..#",
+            "#..#..........#...#.....#",
+            "#..#..............####..#",
+            "#.....##.............#..#",
+            "#..##..#..###........#..#",
+            "#..#.......#...#..#.....#",
+            "#..#.......#...####.....#",
+            "#..#.................#..#",
+            "#.....#######........####",
+            "#.................#.....#",
+            "####....####....###..##.#",
+            "#.......#..#....#....#..#",
+            "#.###..##..##...........#",
+            "#...............###.....#",
+            "###.......####....###...#",
+            "#.........#.............#",
+            "#.###.##......#...#..#..#",
+            "#.....#.......#.........#",
+            "#########################"
+        ];
+        let map;
+        let player;
+        let ghosts;
+        let score;
+        let gameOver;
+        let won;
+        let timer;
+        let tick;
+
+        function restartGame() {
+            clearInterval(timer);
+
+            map = originalMap.map(row => row.split(""));
+
+            player = {
+                x: 1, y: 1,
+                dx: 0, dy: 0,
+                nextDx: 0, nextDy: 0,
+                mouth: 0
+            };
+
+            ghosts = [
+                { x: 13, y: 13, color: "red" },
+                { x: 13, y: 1, color: "pink" },
+                { x: 7, y: 7, color: "cyan" }
+            ];
+
+            score = 0;
+            gameOver = false;
+            won = false;
+            tick = 0;
+
+            updateScore();
+            draw();
+
+            timer = setInterval(update, 140);
+        }
+
+        function setDirection(dx, dy) {
+            player.nextDx = dx;
+            player.nextDy = dy;
+        }
+
+        document.addEventListener("keydown", function (e) {
+            const keys = {
+                ArrowUp: [0, -1],
+                ArrowDown: [0, 1],
+                ArrowLeft: [-1, 0],
+                ArrowRight: [1, 0],
+                w: [0, -1],
+                s: [0, 1],
+                a: [-1, 0],
+                d: [1, 0]
+            };
+
+            if (keys[e.key]) {
+                e.preventDefault();
+                setDirection(...keys[e.key]);
+            }
+
+            if (e.key === "Enter" && (gameOver || won)) {
+                restartGame();
+            }
+        });
+
+        function isWall(x, y) {
+            return !map[y] || map[y][x] === "#";
+        }
+
+        function update() {
+            if (gameOver || won) return;
+
+            if (!isWall(player.x + player.nextDx,
+                player.y + player.nextDy)) {
+                player.dx = player.nextDx;
+                player.dy = player.nextDy;
+            }
+
+            if (!isWall(player.x + player.dx,
+                player.y + player.dy)) {
+                player.x += player.dx;
+                player.y += player.dy;
+            }
+
+            if (map[player.y][player.x] === ".") {
+                map[player.y][player.x] = " ";
+                score += 1;
+                updateScore();
+            }
+
+            tick++;
+
+            if (tick % 2 === 0) {
+                ghosts.forEach(ghost => {
+                    const directions = [
+                        [1, 0], [-1, 0], [0, 1], [0, -1]
+                    ].filter(([dx, dy]) =>
+                        !isWall(ghost.x + dx, ghost.y + dy)
+                    );
+
+                    if (directions.length > 0) {
+
+                        let direction;
+
+                        if (Math.random() < 0.45) {
+                            directions.sort((a, b) => {
+                                const da =
+                                    Math.abs(ghost.x + a[0] - player.x) +
+                                    Math.abs(ghost.y + a[1] - player.y);
+
+                                const db =
+                                    Math.abs(ghost.x + b[0] - player.x) +
+                                    Math.abs(ghost.y + b[1] - player.y);
+
+                                return da - db;
+                            });
+
+                            direction = directions[0];
+                        } else {
+                            direction = directions[
+                                Math.floor(Math.random() * directions.length)
+                            ];
+                        }
+
+                        ghost.x += direction[0];
+                        ghost.y += direction[1];
+                    }
+                });
+            }
+
+            for (const ghost of ghosts) {
+                if (ghost.x === player.x && ghost.y === player.y) {
+                    gameOver = true;
+                    clearInterval(timer);
+                    break;
+                }
+            }
+
+            if (!map.some(row => row.includes("."))) {
+                won = true;
+                clearInterval(timer);
+            }
+
+            draw();
+        }
+
+        function updateScore() {
+            scoreText.textContent = "Score: " + score;
+        }
+
+        function draw() {
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            for (let y = 0; y < map.length; y++) {
+                for (let x = 0; x < map[y].length; x++) {
+                    const px = x * tile;
+                    const py = y * tile;
+
+                    if (map[y][x] === "#") {
+                        ctx.fillStyle = "#172cff";
+                        ctx.fillRect(px, py, tile, tile);
+
+                        ctx.strokeStyle = "#5274ff";
+                        ctx.strokeRect(px + 2, py + 2,
+                            tile - 4, tile - 4);
+                    } else if (map[y][x] === ".") {
+                        ctx.fillStyle = "#ffe6a3";
+                        ctx.beginPath();
+                        ctx.arc(px + 15, py + 15, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+
+            let angle = 0;
+
+            if (player.dx === -1) angle = Math.PI;
+            if (player.dy === -1) angle = -Math.PI / 2;
+            if (player.dy === 1) angle = Math.PI / 2;
+
+            const mouth = Math.abs(Math.sin(tick / 2)) * 0.3;
+
+            ctx.fillStyle = "yellow";
+            ctx.beginPath();
+            ctx.moveTo(player.x * tile + 15,
+                player.y * tile + 15);
+            ctx.arc(
+                player.x * tile + 15,
+                player.y * tile + 15,
+                12,
+                angle + mouth,
+                angle + Math.PI * 2 - mouth
+            );
+            ctx.closePath();
+            ctx.fill();
+
+
+            ghosts.forEach(ghost => {
+                const gx = ghost.x * tile + 15;
+                const gy = ghost.y * tile + 15;
+
+                ctx.fillStyle = ghost.color;
+                ctx.beginPath();
+                ctx.arc(gx, gy, 12, Math.PI, 0);
+                ctx.lineTo(gx + 12, gy + 11);
+                ctx.lineTo(gx + 5, gy + 7);
+                ctx.lineTo(gx, gy + 11);
+                ctx.lineTo(gx - 5, gy + 7);
+                ctx.lineTo(gx - 12, gy + 11);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = "white";
+                ctx.beginPath();
+                ctx.arc(gx - 5, gy - 2, 4, 0, Math.PI * 2);
+                ctx.arc(gx + 5, gy - 2, 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = "#111";
+                ctx.beginPath();
+                ctx.arc(gx - 4, gy - 2, 2, 0, Math.PI * 2);
+                ctx.arc(gx + 6, gy - 2, 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+
+            if (gameOver || won) {
+                ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+                ctx.fillRect(30, 175, 390, 100);
+
+                ctx.textAlign = "center";
+                ctx.fillStyle = won ? "#00ff99" : "#ff5555";
+                ctx.font = "bold 28px Arial";
+                ctx.fillText(
+                    ctx.won ? "YOU WIN! CHAMBA" : "LAWLAW GAME OVER! HAHAHA", 225, 220
+                );
+
+                ctx.fillStyle = "white";
+                ctx.font = "15px Arial";
+                ctx.fillText(
+                    "Press ENTER to restart the game",
+                    225, 250
+                );
+            }
+        }
+
+        restartGame();
+    </script>
+
+</body>
+
+</html>
